@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kitchen Pass</title>
+<meta name="description" content="Every dish hot at the same minute. Kitchen Pass works your dinner backwards from serve time and calls each step out like a restaurant pass.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317191c'/%3E%3Cpath d='M14 44h36a18 18 0 0 0-36 0z' fill='%23d9dde1'/%3E%3Crect x='10' y='45' width='44' height='6' rx='2' fill='%23ffb15c'/%3E%3Crect x='29' y='18' width='6' height='8' rx='2' fill='%23d9dde1'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#141619; --panel:#1c1f23; --panel-2:#23272c; --line:#33383f; --text:#ece8df; --muted:#9aa0a7;
+  --paper:#f6f2e7; --paper-2:#ebe5d5; --ink:#1e1c19; --ink-2:#5b5650; --red:#c43a24; --amber:#ffb15c; --stove:#5d8fbf; --counter:#8a8f96;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; --sans:ui-sans-serif,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+body{min-height:100vh;overflow-x:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line);background:#111316}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em;font-size:17px;margin-right:auto}
+.brand svg{width:30px;height:30px}
+.field{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.field input,.field select{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;color:var(--text)}
+.field input[type=time]{font-family:var(--mono);font-size:15px;color-scheme:dark}
+.btn{display:inline-flex;align-items:center;gap:7px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 13px;font-size:14px;transition:background .15s,border-color .15s,transform .1s}
+.btn:hover{background:#2c3137;border-color:#454b53}
+.btn:active{transform:translateY(1px)}
+.btn.hot{background:var(--amber);border-color:var(--amber);color:#1a1307;font-weight:650}
+.btn.hot:hover{background:#ffc07a}
+.btn.on{border-color:var(--amber);color:var(--amber)}
+.btn svg{width:16px;height:16px;flex:none}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:var(--panel-2);border:0;padding:7px 10px;font-size:13px;color:var(--muted)}
+.seg button[aria-pressed=true]{background:#343a41;color:var(--text)}
+
+/* the pass */
+.pass{position:relative;padding:22px 20px 0;background:linear-gradient(#0e0f11,#191b1f 70%,var(--bg));overflow:hidden}
+.lamps{position:absolute;inset:0 0 auto 0;height:180px;pointer-events:none;display:flex;justify-content:space-around}
+.lamps i{width:34%;height:190px;background:radial-gradient(ellipse at 50% 0,rgba(255,170,80,.30),rgba(255,140,50,.10) 45%,transparent 70%);animation:hum 5s ease-in-out infinite}
+.lamps i:nth-child(2){animation-delay:-1.7s}.lamps i:nth-child(3){animation-delay:-3.1s}
+@keyframes hum{50%{opacity:.82}}
+.status{position:relative;display:flex;align-items:flex-end;gap:28px;flex-wrap:wrap;margin-bottom:16px}
+.clock{font:600 46px/1 var(--mono);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.clock small{display:block;font:500 12px/1.4 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.mode{font:600 11px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;padding:5px 8px;border-radius:5px;background:#2a2e34;color:var(--muted);vertical-align:middle;margin-left:10px}
+.mode.live{background:rgba(196,58,36,.18);color:#ff8a72}
+.mode.rehearse{background:rgba(255,177,92,.15);color:var(--amber)}
+.next{flex:1;min-width:240px}
+.next small{display:block;font:500 12px/1.4 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+#nextTxt{font-size:24px;font-weight:650;letter-spacing:-.01em}
+#nextIn{font:600 24px var(--mono);color:var(--amber);margin-left:10px;font-variant-numeric:tabular-nums}
+.progress{height:3px;background:#2a2e34;border-radius:2px;margin-top:10px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--amber);transition:width .25s linear}
+.cooking{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;min-height:0}
+[data-run=live] .cooking,[data-run=rehearse] .cooking{min-height:29px}
+.pill{display:inline-flex;align-items:center;gap:7px;background:#23272c;border:1px solid var(--line);border-radius:999px;padding:4px 11px 4px 9px;font-size:13px;white-space:nowrap;animation:pop .3s cubic-bezier(.3,1.4,.5,1) both}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 0 currentColor;animation:glow 1.6s ease-out infinite;color:rgba(255,177,92,.5)}
+.pill.stove i{background:var(--stove);color:rgba(93,143,191,.5)}
+.pill.counter i,.pill.rest i,.pill.hold i{background:var(--counter);color:transparent;animation:none}
+.pill em{font-style:normal;color:var(--muted)}
+.pill b{font:600 13px var(--mono);font-variant-numeric:tabular-nums;color:var(--amber)}
+.pill.rest b,.pill.hold b{color:var(--muted)}
+@keyframes glow{70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pop{from{transform:scale(.85);opacity:0}}
+.late{position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 14px;padding:10px 12px;border-radius:8px;background:rgba(196,58,36,.16);border:1px solid rgba(196,58,36,.5);color:#ffc2b5;font-size:14px}
+.late[hidden]{display:none}
+.late p{margin:0;flex:1;min-width:240px}
+.late .btn{padding:6px 12px}
+
+.shelf{position:relative;display:flex;gap:16px;align-items:flex-start}
+.railwrap{flex:1;min-width:0;position:relative}
+.rail{height:16px;border-radius:4px;background:linear-gradient(#eef1f3,#aab1b8 45%,#7e868e 55%,#c3c9ce);box-shadow:0 2px 0 #0008,inset 0 -1px 0 #fff4}
+.chits{display:flex;gap:12px;padding:0 6px 26px;margin-top:-6px;overflow-x:auto;overflow-y:hidden;min-height:250px;scrollbar-width:thin}
+.chit{position:relative;flex:none;width:184px;transform-origin:50% 0;animation:print .55s cubic-bezier(.2,.8,.2,1) both}
+.chit .slip{position:relative;background:var(--paper);color:var(--ink);font:13px/1.35 var(--mono);padding:16px 13px 20px;
+  box-shadow:0 10px 24px #0007;
+  -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 7px) no-repeat,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/12px 7px repeat-x;
+          mask:linear-gradient(#000 0 0) top/100% calc(100% - 7px) no-repeat,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/12px 7px repeat-x}
+.chit .slip::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,#0000 0 3px,#0000000a 3px 4px);pointer-events:none}
+.chit .clip{position:absolute;top:-4px;left:50%;width:46px;height:14px;margin-left:-23px;border-radius:3px;background:linear-gradient(#f3f5f6,#9aa2a9);box-shadow:0 2px 3px #0006;z-index:2}
+.chit .hd{display:flex;justify-content:space-between;color:var(--ink-2);font-size:12px}
+.chit .kind{font:800 30px/1.05 var(--mono);letter-spacing:-.02em;margin:8px 0 2px}
+.chit .dish{font-weight:700;font-size:15px;text-transform:uppercase;line-height:1.2;min-height:2.4em}
+.chit .det{color:var(--ink-2);font-size:12px;margin-top:4px;min-height:3em}
+.chit .cut{border-top:1px dashed #0004;margin:10px 0 8px}
+.chit .cd{display:flex;justify-content:space-between;align-items:baseline;font-variant-numeric:tabular-nums}
+.chit .cd b{font-size:20px}
+.chit[data-kind=fire] .kind,.chit[data-kind=serve] .kind{color:var(--red)}
+.chit[data-kind=pull] .kind{color:#1f3f66}
+.chit[data-kind=heat] .kind{color:#a35a10}
+.chit.first .slip{box-shadow:0 0 0 2px var(--amber),0 14px 30px #000a}
+.chit.due{animation:print .55s cubic-bezier(.2,.8,.2,1) both,swing 1.6s ease-in-out .55s infinite}
+.chit.due .slip{background:#fff7da}
+.chit .stamp{display:none;position:absolute;right:10px;top:46px;transform:rotate(-12deg);border:3px solid var(--red);color:var(--red);font:900 20px/1 var(--mono);padding:4px 7px;border-radius:5px;opacity:.88}
+.chit.due .stamp{display:block;animation:stamp .3s cubic-bezier(.3,1.6,.5,1) both}
+.chit .spk{visibility:hidden;display:block;margin-top:10px;width:100%;border:1.5px solid var(--ink);background:transparent;color:var(--ink);font:700 12px var(--mono);letter-spacing:.08em;border-radius:5px;padding:6px}
+.chit.due .spk{visibility:visible}
+.chit .spk:hover{background:var(--ink);color:var(--paper)}
+.chit.gone{animation:spiked .45s cubic-bezier(.5,0,.8,.4) forwards}
+@keyframes print{from{clip-path:inset(0 0 100% 0);transform:translateY(-14px)}to{clip-path:inset(0 0 -40px 0);transform:none}}
+@keyframes swing{0%,100%{rotate:0deg}25%{rotate:1.6deg}75%{rotate:-1.6deg}}
+@keyframes stamp{from{transform:rotate(-12deg) scale(2.2);opacity:0}}
+@keyframes spiked{to{transform:translate(60vw,40px) rotate(18deg) scale(.4);opacity:0}}
+.empty{color:var(--muted);padding:40px 10px;font-size:14px}
+
+.spindle{flex:none;width:96px;text-align:center;padding-top:6px}
+.spindle svg{width:70px;height:170px;display:block;margin:0 auto}
+.spindle b{display:block;font:700 20px var(--mono)}
+.spindle small{color:var(--muted);font-size:12px}
+
+/* work area */
+.work{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:18px;padding:18px 20px 30px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card h2{font-size:13px;font-weight:650;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 12px;display:flex;align-items:center;gap:10px}
+.card h2 .sp{margin-left:auto}
+.dishes{display:grid;gap:8px}
+.dish{display:grid;grid-template-columns:minmax(90px,1.6fr) 84px 58px 62px 50px 50px 104px 24px;gap:6px;align-items:center}
+.dish.head{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.dish input,.dish select{width:100%;min-width:0;background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:14px}
+.dish input.num{font-family:var(--mono);text-align:right}
+.dish input:disabled{opacity:.35}
+.dish input.bad{border-color:var(--red)}
+.dish .x{background:none;border:0;color:var(--muted);font-size:18px;padding:4px}
+.dish .x:hover{color:var(--red)}
+.dish .f{display:block;min-width:0}
+.dish .f>span:first-child{display:none;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 3px 2px}
+.chk{display:flex;gap:4px}
+.chk input[data-k=check]:placeholder-shown+input{opacity:.4}
+.title{width:100%;background:transparent;border:0;border-bottom:1px dashed var(--line);border-radius:0;padding:4px 2px 8px;margin:0 0 12px;font-size:19px;font-weight:650;color:var(--text)}
+.title:focus{border-bottom-color:var(--amber);outline:0}
+.title::placeholder{color:#5f656c}
+.addrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.hint{color:var(--muted);font-size:12.5px;margin-top:10px}
+
+.clash{border-radius:8px;padding:10px 12px;font-size:13.5px;margin-bottom:12px;display:none}
+.clash.bad{display:block;background:rgba(196,58,36,.14);border:1px solid rgba(196,58,36,.45);color:#ffb3a4}
+.clash.fixed{display:block;background:rgba(120,190,120,.10);border:1px solid rgba(120,190,120,.35);color:#bfe3bf}
+.clash ul{margin:6px 0 0;padding-left:18px}
+#gantt{width:100%;height:auto;display:block}
+#gantt text{font:11px var(--sans);fill:var(--muted)}
+#gantt .lbl{fill:var(--text);font-size:12px}
+.toggle{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);cursor:pointer}
+.toggle input{accent-color:var(--amber);width:16px;height:16px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:12px;height:8px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,30px);background:var(--paper);color:var(--ink);font:600 14px var(--sans);padding:10px 16px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none;box-shadow:0 10px 30px #000a;z-index:9}
+.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{margin-left:12px;background:var(--ink);color:var(--paper);border:0;border-radius:5px;padding:4px 10px;font:700 13px var(--sans)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+@media (max-width:1240px){.work{grid-template-columns:1fr}}
+@media (max-width:860px){
+  .top{gap:8px;padding:10px 14px}.btn .t{display:none}.btn{padding:8px 10px}.btn.hot .t{display:inline}
+  .pass{padding:16px 14px 0}.work{padding:14px}.clock{font-size:36px}
+  .spindle{display:none}
+  .dish{grid-template-columns:repeat(3,minmax(0,1fr));padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .dish.head{display:none}
+  .dish .f>span:first-child{display:block}
+  .dish{position:relative}
+  .dish .f:first-child{grid-column:1/3}
+  .dish .f:nth-child(7){grid-column:2/4}
+  .dish .x{position:absolute;top:-6px;right:-4px}
+  .dish .x{justify-self:end}
+  #speed{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 44h36a18 18 0 0 0-36 0z" fill="#d9dde1"/><path d="M20 42a12 12 0 0 1 8-11" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/><rect x="10" y="45" width="44" height="6" rx="2" fill="#ffb15c"/><rect x="29" y="18" width="6" height="8" rx="2" fill="#d9dde1"/></svg>
+    Kitchen Pass
+  </div>
+  <label class="field">Serve at <input type="time" id="serve" value="17:00" step="300"></label>
+  <label class="field"><span class="sr">Rehearsal speed</span>
+    <select id="speed" aria-label="Rehearsal speed"><option value="120">×120</option><option value="240" selected>×240</option><option value="600">×600</option></select>
+  </label>
+  <button class="btn" id="rehearse"><svg viewBox="0 0 16 16"><path d="M3 2l5 6-5 6zM9 2l5 6-5 6z" fill="currentColor"/></svg><span class="t">Rehearse</span></button>
+  <button class="btn hot" id="live"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="currentColor"/></svg><span class="t">Start service</span></button>
+  <button class="btn on" id="sound" aria-pressed="true" title="Bell and call-outs"><svg viewBox="0 0 16 16"><path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg><span class="t">Sound</span></button>
+  <button class="btn" id="share"><svg viewBox="0 0 16 16"><path d="M6.5 9.5l3-3M5 7L3.6 8.4a2.5 2.5 0 0 0 3.5 3.5L8.5 10.5M11 9l1.4-1.4a2.5 2.5 0 0 0-3.5-3.5L7.5 5.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span class="t">Share</span></button>
+  <button class="btn" id="ticket"><svg viewBox="0 0 16 16"><path d="M3 1h10v13l-1.7-1-1.6 1-1.7-1-1.6 1-1.7-1L3 14z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5h5M5.5 8h5" stroke="currentColor" stroke-width="1.5"/></svg><span class="t">Ticket</span></button>
+</header>
+
+<section class="pass" aria-label="The pass">
+  <div class="lamps" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="status">
+    <div class="clock"><small>Kitchen time <span class="mode" id="mode">Plan</span></small><span id="clock">--:--</span></div>
+    <div class="next" aria-live="polite"><small>Next call</small><b id="nextTxt">—</b><span id="nextIn"></span>
+      <div class="progress"><i id="prog"></i></div><div class="cooking" id="cooking" aria-label="On the heat now"></div></div>
+  </div>
+  <div class="late" id="late" role="alert" hidden></div>
+  <div class="shelf">
+    <div class="railwrap">
+      <div class="rail" aria-hidden="true"></div>
+      <div class="chits" id="chits"></div>
+    </div>
+    <div class="spindle" aria-label="Done tickets">
+      <svg viewBox="0 0 70 170" aria-hidden="true"><rect x="8" y="152" width="54" height="12" rx="3" fill="#7e868e"/><rect x="33.5" y="10" width="3" height="146" fill="#c3c9ce"/><path d="M35 2l3 10h-6z" fill="#c3c9ce"/><g id="pile"></g></svg>
+      <b id="spikeN">0</b><small>done</small>
+    </div>
+  </div>
+</section>
+
+<main class="work">
+  <section class="card" aria-labelledby="menuH">
+    <h2 id="menuH">Menu
+      <select id="preset" class="sp" aria-label="Load a menu" style="background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:13px;letter-spacing:0;text-transform:none;color:var(--text)">
+        <option value="">Load a menu…</option><option value="thanksgiving">Thanksgiving for 8</option><option value="roast">Sunday roast</option><option value="weeknight">Weeknight pasta</option><option value="empty">Start empty</option>
+      </select>
+    </h2>
+    <input class="title" id="title" maxlength="40" placeholder="Name this dinner" aria-label="Dinner name">
+    <div class="dishes" id="dishes"></div>
+    <div class="addrow"><button class="btn" id="add">+ Add dish</button>
+      <label class="field">Ovens <select id="ovens"><option>1</option><option>2</option></select></label>
+      <div class="seg" role="group" aria-label="Temperature unit"><button id="uF" aria-pressed="true">°F</button><button id="uC" aria-pressed="false">°C</button></div></div>
+    <p class="hint">Times take <b>3h30</b>, <b>3:30</b> or <b>210</b>. Rest is time out of the heat before serving. Check repeats a reminder (baste, stir) every so many minutes. In service, <b>space</b> spikes the called ticket; <b>R</b> rehearses. Your menu stays in this browser.</p>
+  </section>
+  <section class="card" aria-labelledby="lineH">
+    <h2 id="lineH">The line <label class="toggle sp"><input type="checkbox" id="solve" checked> Solve oven clashes</label></h2>
+    <div class="clash" id="clash" role="status"></div>
+    <svg id="gantt" role="img" aria-label="Timeline of every dish"></svg>
+    <div class="legend" id="legend"></div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>// Kitchen Pass core: pure logic shared by the app and selftest.cjs (no DOM).
+// Works a dinner backwards from the serve time: prep, preheat, fire, baste, pull, rest, serve.
+// Finds oven clashes (two temperatures at once) and can solve them by finishing a dish early and holding it warm.
+(function (root) {
+  const MIN = 60000;
+
+  // "3h30", "3:30", "210", "1h", "45m" -> minutes
+  function parseDur(s) {
+    s = String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, '');
+    if (!s) return 0;
+    let m = s.match(/^(\d+(?:\.\d+)?)h(?:(\d+)m?)?$/);
+    if (m) return Math.round(+m[1] * 60 + (+m[2] || 0));
+    m = s.match(/^(\d+):(\d{1,2})$/);
+    if (m) return +m[1] * 60 + +m[2];
+    m = s.match(/^(\d+(?:\.\d+)?)m?(?:in)?$/);
+    if (m) return Math.round(+m[1]);
+    return NaN;
+  }
+  const fmtDur = min => {
+    min = Math.round(min);
+    if (min < 60) return min + ' min';
+    return Math.floor(min / 60) + ' h' + (min % 60 ? ' ' + String(min % 60).padStart(2, '0') : '');
+  };
+  const toC = f => Math.round((f - 32) * 5 / 9 / 5) * 5;
+  const toF = c => Math.round((c * 9 / 5 + 32) / 5) * 5;
+  const fmtTemp = (f, unit) => unit === 'C' ? toC(f) + '°C' : f + '°F';
+
+  function clean(d) {
+    const where = ['oven', 'stove', 'counter'].includes(d.where) ? d.where : 'oven';
+    return {
+      name: String(d.name || 'Dish').slice(0, 40),
+      cook: Math.max(0, Math.min(24 * 60, Math.round(+d.cook || 0))),
+      rest: Math.max(0, Math.min(240, Math.round(+d.rest || 0))),
+      prep: Math.max(0, Math.min(240, Math.round(+d.prep || 0))),
+      where,
+      temp: where === 'oven' ? Math.max(150, Math.min(550, Math.round(+d.temp || 350))) : null,
+      check: Math.max(0, Math.min(240, Math.round(+d.check || 0))),
+      checkLabel: String(d.checkLabel || (where === 'stove' ? 'Stir' : 'Baste')).slice(0, 16),
+    };
+  }
+
+  // Oven usage at any moment: distinct temperatures of the oven dishes cooking then.
+  // A clash is a span where more temperatures are needed than there are ovens.
+  function ovenClashes(items, ovens = 1) {
+    const oven = items.filter(i => i.dish.where === 'oven' && i.dish.cook > 0);
+    const cuts = [...new Set(oven.flatMap(i => [i.fireAt, i.pullAt]))].sort((a, b) => a - b);
+    const out = [];
+    for (let k = 0; k < cuts.length - 1; k++) {
+      const a = cuts[k], b = cuts[k + 1];
+      const on = oven.filter(i => i.fireAt < b && i.pullAt > a);
+      const temps = [...new Set(on.map(i => i.dish.temp))];
+      if (temps.length > ovens) {
+        const last = out[out.length - 1];
+        const names = on.map(i => i.dish.name);
+        if (last && last.to === a && last.names.join() === names.join()) last.to = b;
+        else out.push({ from: a, to: b, temps, names });
+      }
+    }
+    return out;
+  }
+
+  function place(d, serve, hold) {
+    const readyAt = serve - hold * MIN;
+    const pullAt = readyAt - d.rest * MIN;
+    const fireAt = pullAt - d.cook * MIN;
+    return { dish: d, hold, readyAt, pullAt, fireAt, prepAt: fireAt - d.prep * MIN };
+  }
+
+  // opts: { ovens: 1, solve: false, preheat: 15 }
+  function schedule(dishes, serve, opts = {}) {
+    const ovens = opts.ovens || 1, preheat = opts.preheat == null ? 15 : opts.preheat;
+    const list = dishes.map(clean);
+    let items;
+    if (!opts.solve) items = list.map(d => place(d, serve, 0));
+    else {
+      // ponytail: greedy, longest oven dish keeps its slot; each later one tries (1) finishing up to 1 h early and holding warm,
+      // (2) sharing a nearby temperature (within 25°F) with a dish already in, (3) holding up to 3 h. Fine for a home dinner.
+      const order = list.map((d, i) => i).sort((a, b) => (list[b].where === 'oven') - (list[a].where === 'oven') || list[b].cook - list[a].cook);
+      const placed = [];
+      const fits = it => !ovenClashes(placed.filter(Boolean).concat(it), ovens).length;
+      const tryHolds = (d, max) => { for (let h = 0; h <= max; h += 5) { const it = place(d, serve, h); if (fits(it)) return it; } return null; };
+      for (const i of order) {
+        const d = list[i];
+        let it = d.where !== 'oven' ? place(d, serve, 0) : tryHolds(d, 60);
+        if (!it) {
+          const near = [...new Set(placed.filter(p => p && p.dish.where === 'oven').map(p => p.dish.temp))]
+            .filter(t => Math.abs(t - d.temp) <= 25).sort((a, b) => Math.abs(a - d.temp) - Math.abs(b - d.temp));
+          for (const t of near) { const c = tryHolds(Object.assign({}, d, { temp: t }), 60); if (c && (!it || c.hold < it.hold)) { it = c; it.moved = d.temp; } }
+        }
+        if (!it) it = tryHolds(d, 180) || place(d, serve, 0);
+        placed[i] = it;
+      }
+      items = placed;
+    }
+    const clashes = ovenClashes(items, ovens);
+
+    const ev = [];
+    const add = (t, kind, it, text) => ev.push({ t, kind, dish: it ? it.dish.name : null, text, idx: it ? items.indexOf(it) : -1 });
+    for (const it of items) {
+      const d = it.dish, where = d.where === 'oven' ? 'oven ' + d.temp + '°F' : d.where;
+      if (d.prep) add(it.prepAt, 'prep', it, 'Prep ' + d.name + ' · ' + fmtDur(d.prep));
+      if (d.cook) add(it.fireAt, 'fire', it, 'Fire ' + d.name + ' · ' + where + ' · ' + fmtDur(d.cook) + (it.moved ? (d.temp > it.moved ? ' · ' + (d.temp - it.moved) + '° hotter than the recipe, check early' : ' · ' + (it.moved - d.temp) + '° cooler than the recipe, check late') : ''));
+      if (d.check && d.cook) for (let t = it.fireAt + d.check * MIN; t < it.pullAt - 2 * MIN; t += d.check * MIN) add(t, 'check', it, d.checkLabel + ' ' + d.name);
+      if (d.cook) add(it.pullAt, 'pull', it, (d.where === 'oven' ? 'Pull ' : 'Off heat: ') + d.name + (d.rest ? ' · rest ' + fmtDur(d.rest) : ''));
+      if (it.hold) add(it.readyAt, 'hold', it, 'Hold ' + d.name + ' warm, covered · ' + fmtDur(it.hold));
+    }
+    // preheat whenever the oven has to change temperature
+    const fires = items.filter(i => i.dish.where === 'oven' && i.dish.cook).sort((a, b) => a.fireAt - b.fireAt);
+    let cur = null, curEnd = -Infinity;
+    for (const it of fires) {
+      if (it.dish.temp !== cur || it.fireAt > curEnd + 30 * MIN) {
+        if (preheat) {
+          // one oven still busy with the last dish: change the dial as that dish comes out
+          const busy = cur !== null && curEnd > it.fireAt - preheat * MIN;
+          ev.push(busy ? { t: Math.min(curEnd, it.fireAt), kind: 'heat', dish: null, idx: -1, text: 'Oven ' + (it.dish.temp > cur ? 'up' : 'down') + ' to ' + it.dish.temp + '°F' }
+            : { t: it.fireAt - preheat * MIN, kind: 'heat', dish: null, idx: -1, text: 'Preheat oven to ' + it.dish.temp + '°F' });
+        }
+        cur = it.dish.temp;
+      }
+      curEnd = Math.max(curEnd, it.pullAt);
+    }
+    ev.push({ t: serve, kind: 'serve', dish: null, idx: -1, text: 'Serve' });
+    const rank = { pull: 0, heat: 1, prep: 2, hold: 3, fire: 4, check: 5, serve: 6 };
+    ev.sort((a, b) => a.t - b.t || rank[a.kind] - rank[b.kind]);
+    ev.forEach((e, i) => e.n = i + 1);
+    const start = ev.length ? ev[0].t : serve;
+    return { items, events: ev, clashes, start, serve };
+  }
+
+  // Serve time "HH:MM" -> the next such moment after `now` (today, or tomorrow if it has passed by > 1 h).
+  function serveAt(hhmm, now) {
+    const [h, m] = String(hhmm).split(':').map(Number);
+    const d = new Date(now); d.setHours(h || 0, m || 0, 0, 0);
+    if (d.getTime() < now - 60 * MIN) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  const clock = (t, h24) => {
+    const d = new Date(t); let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0');
+    if (h24) return String(h).padStart(2, '0') + ':' + m;
+    const ap = h < 12 ? 'AM' : 'PM'; h = h % 12 || 12; return h + ':' + m + ' ' + ap;
+  };
+  const countdown = ms => {
+    const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(x).padStart(2, '0');
+  };
+
+  const b64 = s => (typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(s))) : Buffer.from(s, 'utf8').toString('base64')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64 = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); return typeof atob === 'function' ? decodeURIComponent(escape(atob(s))) : Buffer.from(s, 'base64').toString('utf8'); };
+  const W = ['oven', 'stove', 'counter'];
+  const encodeMenu = m => b64(JSON.stringify({ v: 1, s: m.serve, t: m.title || '', d: m.dishes.slice(0, 24).map(clean).map(d => [d.name, d.cook, d.rest, d.prep, W.indexOf(d.where), d.temp || 0, d.check, d.checkLabel]) }));
+  function decodeMenu(s) {
+    try {
+      const o = JSON.parse(unb64(s));
+      if (o.v !== 1 || !Array.isArray(o.d) || !/^\d{1,2}:\d{2}$/.test(o.s)) return null;
+      return { serve: o.s, title: String(o.t || '').slice(0, 40), dishes: o.d.slice(0, 24).map(a => clean({ name: a[0], cook: a[1], rest: a[2], prep: a[3], where: W[a[4]], temp: a[5], check: a[6], checkLabel: a[7] })) };
+    } catch { return null; }
+  }
+
+  const PRESETS = {
+    thanksgiving: { title: 'Thanksgiving for 8', serve: '17:00', dishes: [
+      { name: 'Turkey 14 lb', where: 'oven', temp: 325, cook: 210, rest: 40, prep: 20, check: 45, checkLabel: 'Baste' },
+      { name: 'Stuffing', where: 'oven', temp: 375, cook: 40, rest: 0, prep: 20 },
+      { name: 'Green beans', where: 'oven', temp: 350, cook: 25, rest: 0, prep: 15 },
+      { name: 'Mashed potatoes', where: 'stove', cook: 25, rest: 0, prep: 20, check: 10, checkLabel: 'Stir' },
+      { name: 'Gravy', where: 'stove', cook: 15, rest: 0, prep: 5, check: 5, checkLabel: 'Whisk' },
+      { name: 'Rolls', where: 'oven', temp: 375, cook: 15, rest: 5, prep: 0 },
+    ] },
+    roast: { title: 'Sunday roast', serve: '13:30', dishes: [
+      { name: 'Roast chicken', where: 'oven', temp: 400, cook: 80, rest: 15, prep: 15, check: 30, checkLabel: 'Baste' },
+      { name: 'Roast potatoes', where: 'oven', temp: 425, cook: 50, rest: 0, prep: 15, check: 20, checkLabel: 'Turn' },
+      { name: 'Carrots', where: 'stove', cook: 15, prep: 10 },
+      { name: 'Gravy', where: 'stove', cook: 10, prep: 5, check: 5, checkLabel: 'Whisk' },
+    ] },
+    weeknight: { title: 'Weeknight pasta', serve: '19:30', dishes: [
+      { name: 'Pasta water', where: 'stove', cook: 12, prep: 0 },
+      { name: 'Spaghetti', where: 'stove', cook: 10, prep: 0, check: 3, checkLabel: 'Stir' },
+      { name: 'Sauce', where: 'stove', cook: 20, prep: 10, check: 5, checkLabel: 'Stir' },
+      { name: 'Garlic bread', where: 'oven', temp: 400, cook: 10, prep: 5 },
+      { name: 'Salad', where: 'counter', cook: 0, prep: 10 },
+    ] },
+  };
+
+  const api = { MIN, parseDur, fmtDur, toC, toF, fmtTemp, clean, ovenClashes, schedule, serveAt, clock, countdown, encodeMenu, decodeMenu, PRESETS };
+  if (typeof module === 'object' && module.exports) module.exports = api; else root.KPCore = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+(() => {
+const C = window.KPCore, MIN = C.MIN, $ = s => document.querySelector(s);
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+// ---------- state ----------
+const S = { title: '', dishes: [], serve: '17:00', unit: 'F', ovens: 1, solve: true, sound: true, run: 'plan', sim: null, fired: new Set(), spiked: new Set(), sched: null };
+function loadMenu(m) { S.title = m.title || ''; S.serve = m.serve; S.dishes = m.dishes.map(C.clean); }
+const fromHash = location.hash.startsWith('#m=') && C.decodeMenu(location.hash.slice(3));
+let saved = null; try { saved = JSON.parse(store.get('kp.menu') || 'null'); } catch {}
+loadMenu(fromHash || (saved && saved.dishes ? saved : C.PRESETS.thanksgiving));
+S.unit = store.get('kp.unit') === 'C' ? 'C' : 'F';
+const save = () => store.set('kp.menu', JSON.stringify({ title: S.title, serve: S.serve, dishes: S.dishes }));
+
+// ---------- clock ----------
+function now() { return S.sim ? S.sim.t0 + (performance.now() - S.sim.p0) * S.sim.speed : Date.now(); }
+function serveMs() {
+  // in plan mode the board shows the dinner as if it starts now
+  if (S.sim) return S.sim.serve;
+  return C.serveAt(S.serve, Date.now());
+}
+const T = f => C.fmtTemp(f, S.unit);
+const unitText = s => S.unit === 'C' ? s.replace(/(\d+)°F/g, (m, f) => C.toC(+f) + '°C').replace(/(\d+)° (hotter|cooler)/, (m, d, w) => Math.round(d * 5 / 9) + '° ' + w) : s;
+
+// ---------- audio ----------
+let ac = null;
+const audio = () => { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } if (ac && ac.state === 'suspended') ac.resume(); return ac; };
+function bell(at = 0) {
+  const a = audio(); if (!a || !S.sound) return; const t = a.currentTime + at, out = a.createGain(); out.gain.value = .32; out.connect(a.destination);
+  [[1, 1, 2.2], [2.76, .45, 1.2], [5.4, .22, .6], [8.93, .1, .35]].forEach(([r, g, d]) => {
+    const o = a.createOscillator(), v = a.createGain(); o.frequency.value = 1568 * r; o.type = 'sine';
+    v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(g, t + .004); v.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(v).connect(out); o.start(t); o.stop(t + d + .05);
+  });
+}
+let noiseBuf = null;
+function noise(a) { if (!noiseBuf) { noiseBuf = a.createBuffer(1, a.sampleRate, a.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; } const s = a.createBufferSource(); s.buffer = noiseBuf; return s; }
+function printer(at = 0) {
+  const a = audio(); if (!a || !S.sound) return; const t = a.currentTime + at, len = .5;
+  const n = noise(a), bp = a.createBiquadFilter(), g = a.createGain(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 1.2;
+  g.gain.setValueAtTime(0, t);
+  for (let k = 0; k < len * 34; k++) { const s = t + k / 34; g.gain.setValueAtTime(.09, s); g.gain.setValueAtTime(.025, s + .012); }
+  g.gain.setValueAtTime(0, t + len);
+  const o = a.createOscillator(), og = a.createGain(); o.type = 'square'; o.frequency.value = 196; og.gain.setValueAtTime(.012, t); og.gain.setValueAtTime(0, t + len);
+  n.connect(bp).connect(g).connect(a.destination); o.connect(og).connect(a.destination);
+  n.start(t); n.stop(t + len + .02); o.start(t); o.stop(t + len + .02);
+}
+function thunk() {
+  const a = audio(); if (!a || !S.sound) return; const t = a.currentTime, o = a.createOscillator(), g = a.createGain();
+  o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(55, t + .14); g.gain.setValueAtTime(.4, t); g.gain.exponentialRampToValueAtTime(.001, t + .18);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + .2);
+}
+function say(text) {
+  if (!S.sound || S.run !== 'live' || !('speechSynthesis' in window)) return;
+  try { const u = new SpeechSynthesisUtterance(text.split(' · ')[0]); u.rate = 1.02; speechSynthesis.speak(u); } catch {}
+}
+
+// ---------- schedule ----------
+function compute() {
+  S.sched = C.schedule(S.dishes, serveMs(), { solve: S.solve, ovens: S.ovens });
+  S.sched.events.forEach(e => e.key = e.kind + '|' + e.dish + '|' + e.n);
+}
+const KIND = { prep: 'PREP', heat: 'OVEN', fire: 'FIRE', pull: 'PULL', hold: 'HOLD', serve: 'SERVE' };
+const kindWord = e => e.kind === 'check' ? (S.sched.items[e.idx].dish.checkLabel || 'CHECK').toUpperCase() : e.kind === 'pull' && e.idx >= 0 && S.sched.items[e.idx].dish.where !== 'oven' ? 'OFF' : KIND[e.kind];
+function chitParts(e) {
+  const it = e.idx >= 0 ? S.sched.items[e.idx] : null, d = it && it.dish;
+  let dish = d ? d.name : e.kind === 'serve' ? 'Plates up' : 'Oven';
+  let det = '';
+  if (e.kind === 'heat') { dish = e.text.replace(/^(Preheat oven|Oven (up|down)) to /, ''); det = /Preheat/.test(e.text) ? 'Preheat, ' + 15 + ' min' : 'Turn the dial as the last dish comes out'; dish = unitText(dish); }
+  else if (e.kind === 'fire') det = (d.where === 'oven' ? 'Oven ' + T(d.temp) : d.where === 'stove' ? 'Stove' : 'Counter') + ' · ' + C.fmtDur(d.cook) + (it.moved ? ' · ' + unitText(e.text.split(' · ').pop()) : '');
+  else if (e.kind === 'prep') det = C.fmtDur(d.prep) + ' before it goes on';
+  else if (e.kind === 'pull') det = d.rest ? 'Rest ' + C.fmtDur(d.rest) + ', covered' : 'Straight to the table';
+  else if (e.kind === 'check') det = 'Every ' + d.check + ' min';
+  else if (e.kind === 'hold') det = 'Covered, warm spot · ' + C.fmtDur(it.hold);
+  else if (e.kind === 'serve') det = S.title || 'Everything hot, now';
+  return { kind: kindWord(e), dish, det };
+}
+
+// ---------- render: menu ----------
+const dishesEl = $('#dishes');
+function renderMenu() {
+  dishesEl.innerHTML = '<div class="dish head"><span>Dish</span><span>Where</span><span>Temp</span><span>Cook</span><span>Rest</span><span>Prep</span><span>Check every</span><span></span></div>';
+  S.dishes.forEach((d, i) => {
+    const row = document.createElement('div'); row.className = 'dish';
+    const tv = d.where === 'oven' ? (S.unit === 'C' ? C.toC(d.temp) : d.temp) : '';
+    row.innerHTML = `<label class="f"><span>Dish</span><input data-k="name" aria-label="Dish name" maxlength="40"></label>
+      <label class="f"><span>Where</span><select data-k="where" aria-label="Where it cooks"><option value="oven">Oven</option><option value="stove">Stove</option><option value="counter">Counter</option></select></label>
+      <label class="f"><span>Temp °${S.unit}</span><input data-k="temp" class="num" inputmode="numeric" placeholder="${d.where === 'oven' ? '°' + S.unit : '—'}" aria-label="Oven temperature ${S.unit === 'C' ? '°C' : '°F'}" ${d.where === 'oven' ? '' : 'disabled'}></label>
+      <label class="f"><span>Cook</span><input data-k="cook" class="num" aria-label="Cook time" placeholder="cook"></label>
+      <label class="f"><span>Rest</span><input data-k="rest" class="num" aria-label="Rest time" placeholder="rest"></label>
+      <label class="f"><span>Prep</span><input data-k="prep" class="num" aria-label="Prep time" placeholder="prep"></label>
+      <div class="f"><span>Check every</span><span class="chk"><input data-k="check" class="num" inputmode="numeric" aria-label="Check every (minutes)" placeholder="min" style="width:42px;flex:none"><input data-k="checkLabel" aria-label="Check label" maxlength="16"></span></div>
+      <button class="x" aria-label="Remove ${esc(d.name)}">×</button>`;
+    row.querySelector('[data-k=name]').value = d.name;
+    row.querySelector('[data-k=where]').value = d.where;
+    row.querySelector('[data-k=temp]').value = tv;
+    row.querySelector('[data-k=cook]').value = d.cook ? C.fmtDur(d.cook).replace(' h ', 'h').replace(' h', 'h').replace(' min', '') : '0';
+    row.querySelector('[data-k=rest]').value = d.rest || '';
+    row.querySelector('[data-k=prep]').value = d.prep || '';
+    row.querySelector('[data-k=check]').value = d.check || '';
+    row.querySelector('[data-k=checkLabel]').value = d.checkLabel;
+    row.addEventListener('change', ev => edit(i, ev.target));
+    row.querySelector('.x').onclick = () => {
+      const [gone] = S.dishes.splice(i, 1); changed(true);
+      toast('Removed ' + gone.name, 'Undo', () => { S.dishes.splice(i, 0, gone); changed(true); });
+    };
+    dishesEl.appendChild(row);
+  });
+}
+function edit(i, el) {
+  const k = el.dataset.k, d = Object.assign({}, S.dishes[i]); if (!k) return;
+  let v = el.value;
+  if (['cook', 'rest', 'prep'].includes(k)) { v = C.parseDur(v || '0'); if (Number.isNaN(v)) { el.classList.add('bad'); return; } el.classList.remove('bad'); }
+  if (k === 'temp') v = S.unit === 'C' ? C.toF(+v) : +v;
+  if (k === 'check') v = +v || 0;
+  d[k] = v;
+  if (k === 'where' && v === 'oven' && !d.temp) d.temp = 350;
+  S.dishes[i] = C.clean(d);
+  changed(k === 'where');
+}
+
+// ---------- render: gantt ----------
+const ovenColor = f => { const x = Math.max(0, Math.min(1, (f - 275) / 175)); return `hsl(${38 - x * 30} 92% ${62 - x * 12}%)`; };
+function renderGantt() {
+  const s = S.sched, svg = $('#gantt'), W = 640, L = 118, R = 10, row = 26, top = 46;
+  const t0 = Math.min(s.start, ...s.items.map(i => i.prepAt)) - 5 * MIN, t1 = s.serve + 5 * MIN;
+  const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+  const H = top + row * (s.items.length + 1) + 22;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  let g = `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#2b3036"/><line x1="0" y1="0" x2="0" y2="6" stroke="#59616b" stroke-width="2.5"/></pattern>
+    <pattern id="clashp" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#5a1d14"/><line x1="0" y1="0" x2="0" y2="6" stroke="#ff6b52" stroke-width="3"/></pattern></defs>`;
+  const span = (t1 - t0) / MIN, step = span > 300 ? 60 : span > 120 ? 30 : 15;
+  const first = Math.ceil(t0 / (step * MIN)) * step * MIN;
+  for (let t = first; t <= t1; t += step * MIN) g += `<line x1="${x(t)}" x2="${x(t)}" y1="${top - 6}" y2="${H - 18}" stroke="#2c3137"/><text x="${x(t)}" y="${H - 4}" text-anchor="middle">${C.clock(t, S.unit === 'C').replace(':00', '').replace(' ', ' ')}</text>`;
+  // oven lane
+  g += `<text class="lbl" x="0" y="${top - 12}">Oven</text>`;
+  s.items.filter(i => i.dish.where === 'oven' && i.dish.cook).forEach(i => g += `<rect x="${x(i.fireAt)}" y="${top - 24}" width="${Math.max(1, x(i.pullAt) - x(i.fireAt))}" height="16" rx="3" fill="${ovenColor(i.dish.temp)}" opacity=".85"><title>${T(i.dish.temp)}</title></rect>`);
+  s.clashes.forEach(c => g += `<rect x="${x(c.from)}" y="${top - 26}" width="${Math.max(2, x(c.to) - x(c.from))}" height="20" rx="3" fill="url(#clashp)"/>`);
+  s.items.forEach((it, r) => {
+    const y = top + 8 + r * row, d = it.dish, name = d.name.length > 16 ? d.name.slice(0, 15) + '…' : d.name;
+    g += `<text class="lbl" x="0" y="${y + 13}">${esc(name)}</text>`;
+    if (d.prep) g += `<rect x="${x(it.prepAt)}" y="${y + 3}" width="${x(it.fireAt) - x(it.prepAt)}" height="12" rx="2" fill="url(#hatch)"/>`;
+    if (d.cook) g += `<rect x="${x(it.fireAt)}" y="${y}" width="${Math.max(2, x(it.pullAt) - x(it.fireAt))}" height="18" rx="3" fill="${d.where === 'oven' ? ovenColor(d.temp) : d.where === 'stove' ? 'var(--stove)' : 'var(--counter)'}"/>`;
+    if (d.where === 'oven' && d.cook && x(it.pullAt) - x(it.fireAt) > 44) g += `<text x="${x(it.fireAt) + 5}" y="${y + 13}" style="fill:#1a1307;font-weight:650">${T(d.temp)}</text>`;
+    if (d.rest) g += `<rect x="${x(it.pullAt)}" y="${y + 5}" width="${x(it.readyAt) - x(it.pullAt)}" height="8" rx="2" fill="#4b525b"/>`;
+    if (it.hold) g += `<rect x="${x(it.readyAt)}" y="${y + 4}" width="${x(s.serve) - x(it.readyAt)}" height="10" rx="2" fill="none" stroke="#9aa0a7" stroke-dasharray="3 3"/>`;
+    s.events.filter(e => e.kind === 'check' && e.idx === r).forEach(e => g += `<line x1="${x(e.t)}" x2="${x(e.t)}" y1="${y - 2}" y2="${y + 20}" stroke="#fff" stroke-width="1.5" opacity=".75"/>`);
+  });
+  g += `<line x1="${x(s.serve)}" x2="${x(s.serve)}" y1="${top - 28}" y2="${H - 18}" stroke="var(--red)" stroke-width="2"/><text x="${x(s.serve) - 4}" y="${top - 30}" text-anchor="end" style="fill:#ff8a72;font-weight:650">SERVE</text>`;
+  const n = now(); if (n > t0 && n < t1) g += `<line id="nowline" x1="${x(n)}" x2="${x(n)}" y1="${top - 28}" y2="${H - 18}" stroke="var(--amber)" stroke-width="2"/>`;
+  svg.innerHTML = g;
+  svg._x = x; svg._top = top; svg._H = H;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+function renderClash() {
+  const el = $('#clash'), s = S.sched, raw = S.solve ? C.schedule(S.dishes, serveMs(), { ovens: S.ovens }) : s;
+  const fmt = c => `${C.clock(c.from, S.unit === 'C')}–${C.clock(c.to, S.unit === 'C')}: ${c.names.map(esc).join(' + ')} need ${c.temps.map(T).join(' and ')} in ${S.ovens === 1 ? 'one oven' : S.ovens + ' ovens'}`;
+  if (s.clashes.length) { el.className = 'clash bad'; el.innerHTML = '<b>Oven clash</b><ul>' + s.clashes.map(c => '<li>' + fmt(c) + '</li>').join('') + '</ul>' + (S.solve ? 'No fix found. Add a second oven, or move a dish to the stove.' : 'Turn on “Solve oven clashes”.'); return; }
+  if (S.solve && raw.clashes.length) {
+    const fixes = s.items.filter(i => i.moved || i.hold).map(i => i.moved ? `${esc(i.dish.name)} joins the oven at ${T(i.dish.temp)} instead of ${T(i.moved)}${i.hold ? ' and is held ' + C.fmtDur(i.hold) : ''}` : `${esc(i.dish.name)} finishes ${C.fmtDur(i.hold)} early and is held warm`);
+    el.className = 'clash fixed'; el.innerHTML = `<b>Oven clash solved with ${fixes.length} change${fixes.length > 1 ? 's' : ''}</b><ul>` + fixes.map(f => '<li>' + f + '</li>').join('') + '</ul>'; return;
+  }
+  el.className = 'clash';
+}
+
+// ---------- render: the pass ----------
+const chitsEl = $('#chits');
+function chitHTML(e) {
+  const p = chitParts(e);
+  return `<div class="clip"></div><div class="slip"><div class="hd"><span>#${String(e.n).padStart(2, '0')}</span><span>${C.clock(e.t, S.unit === 'C')}</span></div>
+    <div class="kind">${esc(p.kind)}</div><div class="dish">${esc(p.dish)}</div><div class="det">${esc(p.det)}</div>
+    <div class="cut"></div><div class="cd"><span class="w">in</span><b class="cdv">—</b></div>
+    <button class="spk" type="button">SPIKE IT ✓</button><div class="stamp">NOW</div></div>`;
+}
+const shown = new Map(); // key -> element
+function renderPass(quiet) {
+  const n = now(), ev = S.sched.events;
+  const due = ev.filter(e => S.fired.has(e.key) && !S.spiked.has(e.key));
+  const up = ev.filter(e => !S.fired.has(e.key));
+  const want = due.concat(up).slice(0, Math.max(8, due.length + 4));
+  const keys = new Set(want.map(e => e.key));
+  for (const [k, el] of shown) if (!keys.has(k)) { if (S.spiked.has(k) && !quiet) { el.classList.add('gone'); setTimeout(() => el.remove(), 450); } else el.remove(); shown.delete(k); }
+  let prev = null;
+  want.forEach((e, i) => {
+    let el = shown.get(e.key);
+    if (!el) {
+      el = document.createElement('article'); el.className = 'chit'; el.dataset.kind = e.kind; el.innerHTML = chitHTML(e);
+      if (quiet) el.style.animation = 'none';
+      el.querySelector('.spk').onclick = () => spike(e.key);
+      shown.set(e.key, el);
+      if (prev && prev.nextSibling !== el) prev.after(el); else if (!prev) chitsEl.prepend(el);
+    } else if (prev ? prev.nextSibling !== el : chitsEl.firstChild !== el) { prev ? prev.after(el) : chitsEl.prepend(el); }
+    el.classList.toggle('due', S.fired.has(e.key));
+    el.classList.toggle('first', i === due.length && S.run !== 'plan');
+    prev = el;
+  });
+  if (!quiet && due.length) chitsEl.scrollTo({ left: Math.max(0, (shown.get(due[due.length - 1].key)?.offsetLeft || 0) - chitsEl.clientWidth / 2), behavior: 'smooth' });
+  if (!want.length) chitsEl.innerHTML = '<p class="empty">Add a dish to fill the pass.</p>';
+  else chitsEl.querySelector('.empty')?.remove();
+  tickPass();
+  renderSpindle();
+}
+function tickPass() {
+  const n = now();
+  for (const [k, el] of shown) {
+    const e = S.sched.events.find(x => x.key === k); if (!e) continue;
+    const cd = el.querySelector('.cdv'), w = el.querySelector('.w');
+    if (S.fired.has(k)) { w.textContent = 'called'; cd.textContent = C.clock(e.t, S.unit === 'C'); }
+    else if (S.run === 'plan') { const m = Math.round((S.sched.serve - e.t) / MIN); w.textContent = m ? 'before serve' : 'serve'; cd.textContent = m ? '−' + Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0') : C.clock(e.t, S.unit === 'C'); }
+    else { w.textContent = 'in'; cd.textContent = C.countdown(e.t - n); }
+  }
+  const nx = S.sched.events.find(e => !S.fired.has(e.key));
+  $('#clock').textContent = C.clock(S.run === 'plan' ? Date.now() : n, S.unit === 'C');
+  if (nx) {
+    const p = chitParts(nx); $('#nextTxt').textContent = p.kind[0] + p.kind.slice(1).toLowerCase() + ' ' + p.dish;
+    $('#nextIn').textContent = S.run === 'plan' ? 'at ' + C.clock(nx.t, S.unit === 'C') + (nx.t > n ? ' · in ' + C.fmtDur((nx.t - n) / MIN) : '') : 'in ' + C.countdown(nx.t - n);
+  } else { $('#nextTxt').textContent = S.sched.events.length ? 'Service done. Enjoy it.' : '—'; $('#nextIn').textContent = ''; }
+  renderCooking(n);
+  if (Date.now() - (renderLate.t || 0) > 15000) renderLate();
+  const s = S.sched, pct = S.run === 'plan' ? 0 : Math.max(0, Math.min(1, (n - s.start) / Math.max(1, s.serve - s.start)));
+  $('#prog').style.width = (pct * 100).toFixed(2) + '%';
+  const nl = $('#nowline'), svg = $('#gantt');
+  if (svg._x) { const xv = svg._x(n); if (nl) { nl.setAttribute('x1', xv); nl.setAttribute('x2', xv); } }
+}
+// what is on the heat (or resting, or held) right now, with time left
+function renderCooking(n) {
+  const el = $('#cooking'); let h = '';
+  if (S.run !== 'plan') S.sched.items.forEach(it => {
+    const d = it.dish, nm = esc(d.name);
+    if (d.cook && it.fireAt <= n && n < it.pullAt) h += `<span class="pill ${d.where}"><i></i>${nm} <em>${d.where === 'oven' ? T(d.temp) : d.where}</em> <b>${C.countdown(it.pullAt - n)}</b></span>`;
+    else if (d.rest && it.pullAt <= n && n < it.readyAt) h += `<span class="pill rest"><i></i>${nm} <em>resting</em> <b>${C.countdown(it.readyAt - n)}</b></span>`;
+    else if (it.hold && it.readyAt <= n && n < S.sched.serve) h += `<span class="pill hold"><i></i>${nm} <em>held warm</em></span>`;
+  });
+  if (h !== el._h) { el.innerHTML = h; el._h = h; }
+}
+// the dinner should already have started: say what was missed and offer the earliest serve time that still works
+const SKIP = 2 * MIN; // calls older than this when service starts are skipped quietly; newer ones still ring
+function renderLate() {
+  renderLate.t = Date.now();
+  const el = $('#late'), s = S.sched, n = Date.now();
+  if (S.run === 'rehearse' || !S.dishes.length || s.start >= n - SKIP) { el.hidden = true; return; }
+  const missed = s.events.filter(e => e.t < n - SKIP && (e.kind === 'fire' || e.kind === 'prep'));
+  const early = Math.ceil((n + (s.serve - s.start) + 5 * MIN) / (5 * MIN)) * 5 * MIN, ed = new Date(early);
+  const hhmm = String(ed.getHours()).padStart(2, '0') + ':' + String(ed.getMinutes()).padStart(2, '0'), f24 = S.unit === 'C';
+  const list = missed.slice(0, 3).map(e => { const p = chitParts(e); return esc(p.kind[0] + p.kind.slice(1).toLowerCase() + ' ' + p.dish) + ' ' + C.clock(e.t, f24); }).join(', ') + (missed.length > 3 ? ' and ' + (missed.length - 3) + ' more' : '');
+  el.innerHTML = `<p><b>Running late.</b> To serve at ${C.clock(s.serve, f24)} this dinner had to start at ${C.clock(s.start, f24)}.${missed.length ? ' Already passed: ' + list + '.' : ''}</p><button class="btn hot" type="button" data-serve="${hhmm}">Serve at ${C.clock(early, f24)} instead</button>`;
+  el.hidden = false;
+}
+$('#late').onclick = e => {
+  const b = e.target.closest('[data-serve]'); if (!b) return;
+  S.serve = b.dataset.serve; $('#serve').value = S.serve; changed(); toast('Serve moved to ' + b.textContent.replace(/^Serve at | instead$/g, '') + '. Every dish still lands hot.');
+};
+function renderSpindle() {
+  const k = S.spiked.size; $('#spikeN').textContent = k;
+  let g = ''; for (let i = 0; i < Math.min(k, 18); i++) g += `<rect x="${14 + (i % 3) * 2}" y="${144 - i * 7}" width="40" height="5" rx="1" fill="#f6f2e7" opacity="${.65 + (i % 2) * .2}" transform="rotate(${(i * 37 % 13) - 6} 35 ${146 - i * 7})"/>`;
+  $('#pile').innerHTML = g;
+}
+function spike(key) { if (S.spiked.has(key)) return; S.spiked.add(key); thunk(); renderPass(); }
+
+// ---------- running ----------
+function fire() {
+  if (S.run === 'plan') return;
+  const n = now(), fresh = S.sched.events.filter(e => e.t <= n && !S.fired.has(e.key));
+  if (!fresh.length) return;
+  fresh.forEach(e => S.fired.add(e.key));
+  bell(); printer(.15);
+  if (S.run === 'live') {
+    fresh.forEach(e => say(e.kind === 'serve' ? 'Service. Plates up.' : e.text));
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try { new Notification('Kitchen Pass', { body: fresh.map(e => unitText(e.text)).join('\n'), tag: 'kp' }); } catch {}
+    }
+  }
+  // rehearsal: older called tickets spike themselves so the rail keeps moving
+  if (S.run === 'rehearse') S.sched.events.filter(e => S.fired.has(e.key) && !S.spiked.has(e.key) && e.t < n - 8 * MIN && e.kind !== 'serve').forEach(e => S.spiked.add(e.key));
+  renderPass();
+}
+let wake = null;
+function setRun(mode) {
+  S.run = mode; S.fired = new Set(); S.spiked = new Set();
+  chitsEl.innerHTML = ''; shown.clear();
+  if (mode === 'rehearse') {
+    compute(); const t0 = S.sched.start - 2 * MIN;
+    S.sim = { t0, p0: performance.now(), speed: +$('#speed').value, serve: S.sched.serve };
+  } else S.sim = null;
+  compute();
+  if (mode === 'live') {
+    skipPast();
+    try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {}); } catch {}
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch?.(() => {});
+  } else if (wake) { wake.release().catch(() => {}); wake = null; }
+  $('#mode').textContent = { plan: 'Plan', live: 'Live', rehearse: 'Rehearsal ×' + $('#speed').value }[mode];
+  $('#mode').className = 'mode ' + mode;
+  document.body.dataset.run = mode;
+  $('#live').innerHTML = mode === 'live' ? '<svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor"/></svg><span class="t">Stop service</span>' : '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="currentColor"/></svg><span class="t">Start service</span>';
+  $('#rehearse').classList.toggle('on', mode === 'rehearse');
+  renderAll(true);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.run === 'live' && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {}); });
+
+// live service: calls well in the past are done (the late banner names them); a call from the last 2 min still rings
+function skipPast() { const n = now(); S.sched.events.filter(e => e.t <= n - SKIP).forEach(e => { S.fired.add(e.key); S.spiked.add(e.key); }); }
+function renderAll(quiet) { renderGantt(); renderClash(); renderLate(); renderPass(quiet); }
+function changed(rebuildMenu) {
+  save(); if (rebuildMenu) renderMenu();
+  if (S.run === 'rehearse') { setRun('rehearse'); return; }
+  compute(); if (S.run === 'live') skipPast();
+  chitsEl.innerHTML = ''; shown.clear(); renderAll(true);
+}
+setInterval(() => {
+  if (S.run === 'rehearse' && now() > S.sched.serve + 3 * MIN) { S.sim.speed = 0; S.sim.t0 = S.sched.serve + 3 * MIN; S.sim.p0 = performance.now(); }
+  fire(); tickPass();
+}, 200);
+
+// ---------- share + ticket ----------
+function toast(t, label, act) {
+  const el = $('#toast'); el.textContent = t;
+  if (label) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.onclick = () => { el.classList.remove('show'); act(); }; el.appendChild(b); }
+  el.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('show'), label ? 5000 : 2400);
+}
+$('#share').onclick = async () => {
+  const url = location.href.split('#')[0] + '#m=' + C.encodeMenu({ serve: S.serve, title: S.title, dishes: S.dishes });
+  history.replaceState(null, '', url);
+  try { await navigator.clipboard.writeText(url); toast('Link copied. It opens this exact menu.'); } catch { prompt('Copy this link', url); }
+};
+function ticketCanvas() {
+  const s = S.sched, w = 576, pad = 30, lh = 30, ev = s.events, f24 = S.unit === 'C';
+  const lines = [];
+  ev.forEach(e => { const p = chitParts(e); lines.push([C.clock(e.t, f24), p.kind, p.dish + (e.kind === 'fire' ? ' · ' + p.det.split(' · ')[0] : '')]); });
+  const cv = document.createElement('canvas'), h = 330 + lines.length * lh + 150; cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); const mono = '"SF Mono",Menlo,Consolas,monospace';
+  g.fillStyle = '#f6f2e7'; g.fillRect(0, 0, w, h - 14);
+  g.beginPath(); g.moveTo(0, h - 14); for (let x = 0; x <= w; x += 16) { g.lineTo(x + 8, h); g.lineTo(x + 16, h - 14); } g.fill();
+  g.fillStyle = '#1e1c19'; g.textAlign = 'center';
+  g.font = `800 34px ${mono}`; g.fillText('KITCHEN PASS', w / 2, 66);
+  g.font = `500 20px ${mono}`; g.fillText((S.title || 'Dinner').toUpperCase().slice(0, 32), w / 2, 102);
+  g.fillText(new Date(s.serve).toDateString().toUpperCase(), w / 2, 132);
+  g.font = `800 44px ${mono}`; g.fillStyle = '#c43a24'; g.fillText('SERVE ' + C.clock(s.serve, f24), w / 2, 196);
+  g.fillStyle = '#1e1c19'; g.font = `500 18px ${mono}`; g.fillText(`${S.dishes.length} dishes · ${ev.length} calls · ${C.fmtDur((s.serve - s.start) / MIN)}`, w / 2, 232);
+  const dash = y => { g.save(); g.setLineDash([8, 6]); g.strokeStyle = '#1e1c1966'; g.beginPath(); g.moveTo(pad, y); g.lineTo(w - pad, y); g.stroke(); g.restore(); };
+  dash(260); g.textAlign = 'left';
+  lines.forEach(([t, k, d], i) => {
+    const y = 300 + i * lh; g.font = `500 19px ${mono}`; g.fillStyle = '#5b5650'; g.fillText(t.padStart(8), pad, y);
+    g.font = `800 19px ${mono}`; g.fillStyle = /FIRE|SERVE/.test(k) ? '#c43a24' : '#1e1c19'; g.fillText(k.slice(0, 6), pad + 118, y);
+    g.font = `500 19px ${mono}`; g.fillStyle = '#1e1c19'; let txt = d; while (g.measureText(txt).width > w - pad * 2 - 200) txt = txt.slice(0, -2) + '…'; g.fillText(txt, pad + 200, y);
+  });
+  const yb = 300 + lines.length * lh; dash(yb - 6); g.textAlign = 'center'; g.font = `500 18px ${mono}`;
+  const raw = S.solve ? C.schedule(S.dishes, s.serve, { ovens: S.ovens }).clashes.length : 0, fixes = s.items.filter(i => i.moved || i.hold).length;
+  g.fillText(s.clashes.length ? `OVEN CLASH LEFT: FIX IT` : raw ? `OVEN CLASH SOLVED: ${fixes} CHANGE${fixes > 1 ? 'S' : ''}` : 'NO OVEN CLASHES', w / 2, yb + 34);
+  g.fillText('EVERY DISH HOT AT THE SAME MINUTE', w / 2, yb + 66);
+  g.font = `700 18px ${mono}`; g.fillText('kitchen-pass.codepost.dev', w / 2, yb + 100);
+  return cv;
+}
+$('#ticket').onclick = () => {
+  printer(); const cv = ticketCanvas();
+  cv.toBlob(async b => {
+    const file = new File([b], 'kitchen-pass-ticket.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia('(pointer:coarse)').matches) { try { await navigator.share({ files: [file], title: 'Kitchen Pass' }); return; } catch {} }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'kitchen-pass-ticket.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Ticket saved as a PNG.');
+  }, 'image/png');
+};
+
+// ---------- controls ----------
+$('#serve').value = S.serve;
+$('#serve').onchange = e => { if (e.target.value) { S.serve = e.target.value; changed(); } };
+$('#rehearse').onclick = () => { audio(); setRun(S.run === 'rehearse' ? 'plan' : 'rehearse'); };
+$('#live').onclick = () => { audio(); setRun(S.run === 'live' ? 'plan' : 'live'); };
+$('#speed').onchange = () => S.run === 'rehearse' && setRun('rehearse');
+$('#sound').onclick = e => { S.sound = !S.sound; const b = $('#sound'); b.classList.toggle('on', S.sound); b.setAttribute('aria-pressed', S.sound); if (S.sound) { audio(); bell(); } };
+$('#solve').onchange = e => { S.solve = e.target.checked; changed(); };
+$('#ovens').onchange = e => { S.ovens = +e.target.value; changed(); };
+$('#add').onclick = () => { S.dishes.push(C.clean({ name: 'New dish', where: 'oven', temp: 350, cook: 30 })); changed(true); dishesEl.lastElementChild.querySelector('input').select(); };
+$('#preset').onchange = e => { const v = e.target.value; if (!v) return; loadMenu(v === 'empty' ? { title: '', serve: S.serve, dishes: [] } : C.PRESETS[v]); $('#serve').value = S.serve; $('#title').value = S.title; e.target.value = ''; changed(true); };
+$('#title').value = S.title;
+$('#title').onchange = e => { S.title = e.target.value.trim().slice(0, 40); changed(); };
+const setUnit = u => { S.unit = u; store.set('kp.unit', u); $('#uF').setAttribute('aria-pressed', u === 'F'); $('#uC').setAttribute('aria-pressed', u === 'C'); renderMenu(); chitsEl.innerHTML = ''; shown.clear(); renderAll(true); };
+$('#uF').onclick = () => setUnit('F'); $('#uC').onclick = () => setUnit('C');
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,select,textarea')) return;
+  if (e.key === ' ') { const d = S.sched.events.find(x => S.fired.has(x.key) && !S.spiked.has(x.key)); if (d) { e.preventDefault(); spike(d.key); } }
+  if (e.key === 'r') $('#rehearse').click();
+});
+
+// test hook (selftests and the demo video drive the real app through this)
+window.__kp = { C, S, setRun, compute, renderAll, ticketCanvas, now, jump(t) { if (S.sim) { S.sim.t0 = t; S.sim.p0 = performance.now(); } } };
+
+compute(); setUnit(S.unit);
+})();
+</script>
+</body>
+</html>
